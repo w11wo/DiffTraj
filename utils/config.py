@@ -1,8 +1,8 @@
 args = {
     "data": {
-        "dataset": "Chengdu",
-        "traj_path1": "/xxxxxxx",
-        "head_path2": "/xxxxxxx",
+        "dataset": "Rome",
+        "traj_path1": "data/rome_train_trajectories.npy",
+        "head_path2": "data/rome_train_attributes.npy",
         "traj_length": 200,
         "channels": 2,
         "uniform_dequantization": False,

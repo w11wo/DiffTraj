@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import os
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
+from tqdm import tqdm
 from types import SimpleNamespace
 from utils.config import args
 from utils.EMA import EMAHelper
@@ -17,12 +18,6 @@ import shutil
 
 
 # This code part from https://github.com/sunlin-ai/diffusion_tutorial
-
-
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def gather(consts: torch.Tensor, t: torch.Tensor):
@@ -43,9 +38,9 @@ def main(config, logger, exp_dir):
     # Create the model
     unet = Guide_UNet(config).cuda()
     # print(unet)
-    traj = np.load("./xxxxxx", allow_pickle=True)
+    traj = np.load("data/rome_train_trajectories.npy", allow_pickle=True)
     traj = traj[:, :, :2]
-    head = np.load("./xxxxxx", allow_pickle=True)
+    head = np.load("data/rome_train_attributes.npy", allow_pickle=True)
     traj = np.swapaxes(traj, 1, 2)
     traj = torch.from_numpy(traj).float()
     head = torch.from_numpy(head).float()
@@ -82,8 +77,9 @@ def main(config, logger, exp_dir):
         os.makedirs(model_save)
 
     # config.training.n_epochs = 1
+    pbar = tqdm(total=config.training.n_epochs * len(dataloader))
     for epoch in range(1, config.training.n_epochs + 1):
-        logger.info("<----Epoch-{}---->".format(epoch))
+        pbar.set_description(f"Epoch {epoch}/{config.training.n_epochs}")
         for _, (trainx, head) in enumerate(dataloader):
             x0 = trainx.cuda()
             head = head.cuda()
@@ -102,6 +98,10 @@ def main(config, logger, exp_dir):
             optim.step()
             if config.model.ema:
                 ema_helper.update(unet)
+
+            pbar.set_postfix({"loss": loss.item()})
+            pbar.update(1)
+
         if (epoch) % 10 == 0:
             m_path = model_save / f"unet_{epoch}.pt"
             torch.save(unet.state_dict(), m_path)
@@ -124,7 +124,7 @@ if __name__ == "__main__":
         config.diffusion.beta_end,
         config.training.batch_size,
     )
-    exp_dir = root_dir / "DiffTraj" / result_name
+    exp_dir = root_dir / "models" / result_name
     for d in ["results", "models", "logs", "Files"]:
         os.makedirs(exp_dir / d, exist_ok=True)
     print("All files saved path ---->>", exp_dir)
