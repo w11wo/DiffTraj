@@ -76,6 +76,8 @@ def main(config, logger, exp_dir):
     if not os.path.exists(model_save):
         os.makedirs(model_save)
 
+    scaler = torch.amp.GradScaler()
+
     # config.training.n_epochs = 1
     pbar = tqdm(total=config.training.n_epochs * len(dataloader))
     for epoch in range(1, config.training.n_epochs + 1):
@@ -87,15 +89,20 @@ def main(config, logger, exp_dir):
             t = torch.cat([t, n_steps - t - 1], dim=0)[: len(x0)]
             # Get the noised images (xt) and the noise (our target)
             xt, noise = q_xt_x0(x0, t)
-            # Run xt through the network to get its predictions
-            pred_noise = unet(xt.float(), t, head)
-            # Compare the predictions with the targets
-            loss = F.mse_loss(noise.float(), pred_noise)
+
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                # Run xt through the network to get its predictions
+                pred_noise = unet(xt.float(), t, head)
+                # Compare the predictions with the targets
+                loss = F.mse_loss(noise.float(), pred_noise)
+
+            scaler.scale(loss).backward()
+            scaler.step(optim)
+            scaler.update()
+
             # Store the loss for later viewing
             losses.append(loss.item())
             optim.zero_grad()
-            loss.backward()
-            optim.step()
             if config.model.ema:
                 ema_helper.update(unet)
 
