@@ -44,7 +44,7 @@ class WideAndDeep(nn.Module):
         self.depature_embedding = nn.Embedding(288, hidden_dim)
         self.sid_embedding = nn.Embedding(257, hidden_dim)
         self.eid_embedding = nn.Embedding(257, hidden_dim)
-        self.deep_fc1 = nn.Linear(hidden_dim*3, embedding_dim)
+        self.deep_fc1 = nn.Linear(hidden_dim * 3, embedding_dim)
         self.deep_fc2 = nn.Linear(embedding_dim, embedding_dim)
 
     def forward(self, attr):
@@ -52,8 +52,7 @@ class WideAndDeep(nn.Module):
         continuous_attrs = attr[:, 1:6]
 
         # Categorical attributes
-        depature, sid, eid = attr[:, 0].long(
-        ), attr[:, 6].long(), attr[:, 7].long()
+        depature, sid, eid = attr[:, 0].long(), attr[:, 6].long(), attr[:, 7].long()
 
         # Wide part
         wide_out = self.wide_fc(continuous_attrs)
@@ -62,8 +61,7 @@ class WideAndDeep(nn.Module):
         depature_embed = self.depature_embedding(depature)
         sid_embed = self.sid_embedding(sid)
         eid_embed = self.eid_embedding(eid)
-        categorical_embed = torch.cat(
-            (depature_embed, sid_embed, eid_embed), dim=1)
+        categorical_embed = torch.cat((depature_embed, sid_embed, eid_embed), dim=1)
         deep_out = F.relu(self.deep_fc1(categorical_embed))
         deep_out = self.deep_fc2(deep_out)
         # Combine wide and deep embeddings
@@ -78,10 +76,7 @@ def nonlinearity(x):
 
 
 def Normalize(in_channels):
-    return torch.nn.GroupNorm(num_groups=32,
-                              num_channels=in_channels,
-                              eps=1e-6,
-                              affine=True)
+    return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
 
 
 class Upsample(nn.Module):
@@ -89,16 +84,10 @@ class Upsample(nn.Module):
         super().__init__()
         self.with_conv = with_conv
         if self.with_conv:
-            self.conv = torch.nn.Conv1d(in_channels,
-                                        in_channels,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1)
+            self.conv = torch.nn.Conv1d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x):
-        x = torch.nn.functional.interpolate(x,
-                                            scale_factor=2.0,
-                                            mode="nearest")
+        x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
         if self.with_conv:
             x = self.conv(x)
         return x
@@ -110,11 +99,7 @@ class Downsample(nn.Module):
         self.with_conv = with_conv
         if self.with_conv:
             # no asymmetric padding in torch conv, must do it ourselves
-            self.conv = torch.nn.Conv1d(in_channels,
-                                        in_channels,
-                                        kernel_size=3,
-                                        stride=2,
-                                        padding=0)
+            self.conv = torch.nn.Conv1d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
 
     def forward(self, x):
         if self.with_conv:
@@ -127,12 +112,7 @@ class Downsample(nn.Module):
 
 
 class ResnetBlock(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels=None,
-                 conv_shortcut=False,
-                 dropout=0.1,
-                 temb_channels=512):
+    def __init__(self, in_channels, out_channels=None, conv_shortcut=False, dropout=0.1, temb_channels=512):
         super().__init__()
         self.in_channels = in_channels
         out_channels = in_channels if out_channels is None else out_channels
@@ -140,32 +120,16 @@ class ResnetBlock(nn.Module):
         self.use_conv_shortcut = conv_shortcut
 
         self.norm1 = Normalize(in_channels)
-        self.conv1 = torch.nn.Conv1d(in_channels,
-                                     out_channels,
-                                     kernel_size=3,
-                                     stride=1,
-                                     padding=1)
+        self.conv1 = torch.nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.temb_proj = torch.nn.Linear(temb_channels, out_channels)
         self.norm2 = Normalize(out_channels)
         self.dropout = torch.nn.Dropout(dropout)
-        self.conv2 = torch.nn.Conv1d(out_channels,
-                                     out_channels,
-                                     kernel_size=3,
-                                     stride=1,
-                                     padding=1)
+        self.conv2 = torch.nn.Conv1d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                self.conv_shortcut = torch.nn.Conv1d(in_channels,
-                                                     out_channels,
-                                                     kernel_size=3,
-                                                     stride=1,
-                                                     padding=1)
+                self.conv_shortcut = torch.nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
             else:
-                self.nin_shortcut = torch.nn.Conv1d(in_channels,
-                                                    out_channels,
-                                                    kernel_size=1,
-                                                    stride=1,
-                                                    padding=0)
+                self.nin_shortcut = torch.nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x, temb):
         h = x
@@ -193,26 +157,10 @@ class AttnBlock(nn.Module):
         self.in_channels = in_channels
 
         self.norm = Normalize(in_channels)
-        self.q = torch.nn.Conv1d(in_channels,
-                                 in_channels,
-                                 kernel_size=1,
-                                 stride=1,
-                                 padding=0)
-        self.k = torch.nn.Conv1d(in_channels,
-                                 in_channels,
-                                 kernel_size=1,
-                                 stride=1,
-                                 padding=0)
-        self.v = torch.nn.Conv1d(in_channels,
-                                 in_channels,
-                                 kernel_size=1,
-                                 stride=1,
-                                 padding=0)
-        self.proj_out = torch.nn.Conv1d(in_channels,
-                                        in_channels,
-                                        kernel_size=1,
-                                        stride=1,
-                                        padding=0)
+        self.q = torch.nn.Conv1d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.k = torch.nn.Conv1d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.v = torch.nn.Conv1d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.proj_out = torch.nn.Conv1d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x):
         h_ = x
@@ -223,7 +171,7 @@ class AttnBlock(nn.Module):
         b, c, w = q.shape
         q = q.permute(0, 2, 1)  # b,hw,c
         w_ = torch.bmm(q, k)  # b,hw,hw    w[b,i,j]=sum_c q[b,i,c]k[b,c,j]
-        w_ = w_ * (int(c)**(-0.5))
+        w_ = w_ * (int(c) ** (-0.5))
         w_ = torch.nn.functional.softmax(w_, dim=2)
         # attend to values
         w_ = w_.permute(0, 2, 1)  # b,hw,hw (first hw of k, second of q)
@@ -239,8 +187,7 @@ class Model(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        ch, out_ch, ch_mult = config.model.ch, config.model.out_ch, tuple(
-            config.model.ch_mult)
+        ch, out_ch, ch_mult = config.model.ch, config.model.out_ch, tuple(config.model.ch_mult)
         num_res_blocks = config.model.num_res_blocks
         attn_resolutions = config.model.attn_resolutions
         dropout = config.model.dropout
@@ -249,7 +196,7 @@ class Model(nn.Module):
         resamp_with_conv = config.model.resamp_with_conv
         num_timesteps = config.diffusion.num_diffusion_timesteps
 
-        if config.model.type == 'bayesian':
+        if config.model.type == "bayesian":
             self.logvar = nn.Parameter(torch.zeros(num_timesteps))
 
         self.ch = ch
@@ -261,20 +208,18 @@ class Model(nn.Module):
 
         # timestep embedding
         self.temb = nn.Module()
-        self.temb.dense = nn.ModuleList([
-            torch.nn.Linear(self.ch, self.temb_ch),
-            torch.nn.Linear(self.temb_ch, self.temb_ch),
-        ])
+        self.temb.dense = nn.ModuleList(
+            [
+                torch.nn.Linear(self.ch, self.temb_ch),
+                torch.nn.Linear(self.temb_ch, self.temb_ch),
+            ]
+        )
 
         # downsampling
-        self.conv_in = torch.nn.Conv1d(in_channels,
-                                       self.ch,
-                                       kernel_size=3,
-                                       stride=1,
-                                       padding=1)
+        self.conv_in = torch.nn.Conv1d(in_channels, self.ch, kernel_size=3, stride=1, padding=1)
 
         curr_res = resolution
-        in_ch_mult = (1, ) + ch_mult
+        in_ch_mult = (1,) + ch_mult
         self.down = nn.ModuleList()
         block_in = None
         for i_level in range(self.num_resolutions):
@@ -284,10 +229,10 @@ class Model(nn.Module):
             block_out = ch * ch_mult[i_level]
             for i_block in range(self.num_res_blocks):
                 block.append(
-                    ResnetBlock(in_channels=block_in,
-                                out_channels=block_out,
-                                temb_channels=self.temb_ch,
-                                dropout=dropout))
+                    ResnetBlock(
+                        in_channels=block_in, out_channels=block_out, temb_channels=self.temb_ch, dropout=dropout
+                    )
+                )
                 block_in = block_out
                 if curr_res in attn_resolutions:
                     attn.append(AttnBlock(block_in))
@@ -301,15 +246,13 @@ class Model(nn.Module):
 
         # middle
         self.mid = nn.Module()
-        self.mid.block_1 = ResnetBlock(in_channels=block_in,
-                                       out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
+        self.mid.block_1 = ResnetBlock(
+            in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout
+        )
         self.mid.attn_1 = AttnBlock(block_in)
-        self.mid.block_2 = ResnetBlock(in_channels=block_in,
-                                       out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
+        self.mid.block_2 = ResnetBlock(
+            in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout
+        )
 
         # upsampling
         self.up = nn.ModuleList()
@@ -322,10 +265,13 @@ class Model(nn.Module):
                 if i_block == self.num_res_blocks:
                     skip_in = ch * in_ch_mult[i_level]
                 block.append(
-                    ResnetBlock(in_channels=block_in + skip_in,
-                                out_channels=block_out,
-                                temb_channels=self.temb_ch,
-                                dropout=dropout))
+                    ResnetBlock(
+                        in_channels=block_in + skip_in,
+                        out_channels=block_out,
+                        temb_channels=self.temb_ch,
+                        dropout=dropout,
+                    )
+                )
                 block_in = block_out
                 if curr_res in attn_resolutions:
                     attn.append(AttnBlock(block_in))
@@ -339,11 +285,7 @@ class Model(nn.Module):
 
         # end
         self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv1d(block_in,
-                                        out_ch,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1)
+        self.conv_out = torch.nn.Conv1d(block_in, out_ch, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x, t, extra_embed=None):
         assert x.shape[2] == self.resolution
@@ -382,10 +324,8 @@ class Model(nn.Module):
             for i_block in range(self.num_res_blocks + 1):
                 ht = hs.pop()
                 if ht.size(-1) != h.size(-1):
-                    h = torch.nn.functional.pad(h,
-                                                (0, ht.size(-1) - h.size(-1)))
-                h = self.up[i_level].block[i_block](torch.cat([h, ht], dim=1),
-                                                    temb)
+                    h = torch.nn.functional.pad(h, (0, ht.size(-1) - h.size(-1)))
+                h = self.up[i_level].block[i_block](torch.cat([h, ht], dim=1), temb)
                 # print(i_level, i_block, h.shape)
                 if len(self.up[i_level].attn) > 0:
                     h = self.up[i_level].attn[i_block](h)
@@ -418,12 +358,11 @@ class Guide_UNet(nn.Module):
         place_emb = self.place_emb(place_vector)
         cond_noise = self.unet(x, t, guide_emb)
         uncond_noise = self.unet(x, t, place_emb)
-        pred_noise = cond_noise + self.guidance_scale * (cond_noise -
-                                                         uncond_noise)
+        pred_noise = cond_noise + self.guidance_scale * (cond_noise - uncond_noise)
         return pred_noise
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from utils.config_WD import args
 
     temp = {}
@@ -440,11 +379,10 @@ if __name__ == '__main__':
     total_len = torch.zeros(10)
     sid = torch.zeros(10)
     eid = torch.zeros(10)
-    attr = torch.stack(
-        [depature, total_dis, total_time, total_len, avg_dis, avg_speed, sid, eid], dim=1)
+    attr = torch.stack([depature, total_dis, total_time, total_len, avg_dis, avg_speed, sid, eid], dim=1)
     unet = Guide_UNet(config)
     x = torch.randn(10, 2, 200)
     total_params = sum(p.numel() for p in unet.parameters())
-    print(f'{total_params:,} total parameters.')
+    print(f"{total_params:,} total parameters.")
     out = unet(x, t, attr)
     print(out.shape)

@@ -25,9 +25,10 @@ LOG_LEVELS = {
 
 
 class _Formatter(logging.Formatter):
-    '''
+    """
     Format the output log
-    '''
+    """
+
     def __init__(self, colorize=False, *args, **kwargs):
         super(_Formatter, self).__init__(*args, **kwargs)
         self.colorize = colorize
@@ -36,8 +37,7 @@ class _Formatter(logging.Formatter):
     def _process(msg, loglevel, colorize):
         loglevel = str(loglevel).lower()
         if loglevel not in LOG_LEVELS:
-            raise RuntimeError(f"{loglevel} should be one of {LOG_LEVELS}."
-                               )  # pragma: no cover
+            raise RuntimeError(f"{loglevel} should be one of {LOG_LEVELS}.")  # pragma: no cover
 
         msg = f"{str(loglevel).upper()}: {str(msg)}"
 
@@ -49,14 +49,11 @@ class _Formatter(logging.Formatter):
         if loglevel == INFO:
             return "{}{}{}".format(fg(4), msg, attr(0))  # noqa: E501
         if loglevel == WARNING:
-            return "{}{}{}{}{}".format(fg(214), attr(1), msg, attr(21),
-                                       attr(0))  # noqa: E501
+            return "{}{}{}{}{}".format(fg(214), attr(1), msg, attr(21), attr(0))  # noqa: E501
         if loglevel == ERROR:
-            return "{}{}{}{}{}".format(fg(202), attr(1), msg, attr(21),
-                                       attr(0))  # noqa: E501
+            return "{}{}{}{}{}".format(fg(202), attr(1), msg, attr(21), attr(0))  # noqa: E501
         if loglevel == CRITICAL:
-            return "{}{}{}{}{}".format(fg(196), attr(1), msg, attr(21),
-                                       attr(0))  # noqa: E501
+            return "{}{}{}{}{}".format(fg(196), attr(1), msg, attr(21), attr(0))  # noqa: E501
 
     def format(self, record):
         record = copy(record)
@@ -66,12 +63,7 @@ class _Formatter(logging.Formatter):
 
 
 class Logger:
-    def __init__(self,
-                 name="default",
-                 colorize=False,
-                 log_path=None,
-                 stream=sys.stdout,
-                 level=INFO):
+    def __init__(self, name="default", colorize=False, log_path=None, stream=sys.stdout, level=INFO):
         self.name = name
 
         # get the logger object; keep it hidden as there's no need to directly access it
@@ -83,8 +75,7 @@ class Logger:
         # use the custom formatter
         self.__formatter = _Formatter(
             colorize=colorize,
-            fmt=
-            "[%(process)d][%(asctime)s.%(msecs)03d @ %(funcName)s] %(message)s",
+            fmt="[%(process)d][%(asctime)s.%(msecs)03d @ %(funcName)s] %(message)s",
             datefmt="%y-%m-%d %H:%M:%S",
         )
 
@@ -108,9 +99,7 @@ class Logger:
     def log_function(self):
         def wrapper(func):
             def func_wrapper(*args, **kwargs):
-                self.__logger.info(
-                    f"calling <{func.__name__}>\n\t  args: {args}\n\tkwargs: {kwargs}"
-                )
+                self.__logger.info(f"calling <{func.__name__}>\n\t  args: {args}\n\tkwargs: {kwargs}")
                 out = func(*args, **kwargs)
                 self.__logger.info(f"exiting <{func.__name__}>")
                 return out
@@ -164,21 +153,20 @@ class Logger:
 
 
 def log_info(args, logger):
-    '''
+    """
     output the information about model
-    '''
-    logger.info('***********************************')
+    """
+    logger.info("***********************************")
     logger.info("Dataset: {}".format(args.data.dataset))
     logger.info("Trajectory Length: {}".format(args.data.traj_length))
     logger.info("Guidance scale: {}".format(args.model.guidance_scale))
-    logger.info("Number of steps: {}".format(
-        args.diffusion.num_diffusion_timesteps))
+    logger.info("Number of steps: {}".format(args.diffusion.num_diffusion_timesteps))
     logger.info("Beta_schedule: {}".format(args.diffusion.beta_schedule))
     logger.info("Beta_strat: {}".format(args.diffusion.beta_start))
     logger.info("Beta_end: {}".format(args.diffusion.beta_end))
 
     logger.info("Epochs: {}".format(args.training.n_epochs))
     logger.info("batch_size: {}".format(args.training.batch_size))
-    logger.info('***********************************')
+    logger.info("***********************************")
 
     return
