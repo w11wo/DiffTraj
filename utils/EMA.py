@@ -20,9 +20,7 @@ class EMAHelper(object):
             module = module.module
         for name, param in module.named_parameters():
             if param.requires_grad:
-                self.shadow[name].data = (
-                    1. -
-                    self.mu) * param.data + self.mu * self.shadow[name].data
+                self.shadow[name].data = (1.0 - self.mu) * param.data + self.mu * self.shadow[name].data
 
     def ema(self, module):
         if isinstance(module, nn.DataParallel):
@@ -34,8 +32,7 @@ class EMAHelper(object):
     def ema_copy(self, module):
         if isinstance(module, nn.DataParallel):
             inner_module = module.module
-            module_copy = type(inner_module)(inner_module.config).to(
-                inner_module.config.device)
+            module_copy = type(inner_module)(inner_module.config).to(inner_module.config.device)
             module_copy.load_state_dict(inner_module.state_dict())
             module_copy = nn.DataParallel(module_copy)
         else:
