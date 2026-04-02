@@ -44,23 +44,38 @@ def main(config, logger, exp_dir):
     # Create the model
     unet = Guide_UNet(config).cuda()
     unet = torch.compile(unet)
-    # print(unet)
-    traj = np.load(config.data.traj_path, allow_pickle=True)
-    traj = traj[:, :, :2]
-    head = np.load(config.data.head_path, allow_pickle=True)
-    traj = np.swapaxes(traj, 1, 2)
-    traj = torch.from_numpy(traj).float()
-    head = torch.from_numpy(head).float()
+
     ###########################################################
     # The input shape of traj and head list as follows:
     # traj: [batch_size, 2, traj_length]   2: latitude and longitude
     # head: [batch_size, 8]   8: departure_time, trip_distance,  trip_time, trip_length, avg_dis, avg_speed, start_id, end_id
     ###########################################################
-    dataset = TensorDataset(traj, head)
-    dataloader = DataLoader(
-        dataset,
+    train_traj = np.load(config.data.train_traj_path, allow_pickle=True)
+    train_head = np.load(config.data.train_head_path, allow_pickle=True)
+    train_traj = np.swapaxes(train_traj, 1, 2)
+    train_traj = torch.from_numpy(train_traj).float()
+    train_head = torch.from_numpy(train_head).float()
+
+    train_dataset = TensorDataset(train_traj, train_head)
+    train_dataloader = DataLoader(
+        train_dataset,
         batch_size=config.training.batch_size,
         shuffle=True,
+        num_workers=16,
+        pin_memory=True,
+        persistent_workers=True,
+    )
+
+    eval_traj = np.load(config.data.eval_traj_path, allow_pickle=True)
+    eval_head = np.load(config.data.eval_head_path, allow_pickle=True)
+    eval_traj = np.swapaxes(eval_traj, 1, 2)
+    eval_traj = torch.from_numpy(eval_traj).float()
+    eval_head = torch.from_numpy(eval_head).float()
+    eval_dataset = TensorDataset(eval_traj, eval_head)
+    eval_dataloader = DataLoader(
+        eval_dataset,
+        batch_size=config.training.batch_size,
+        shuffle=False,
         num_workers=16,
         pin_memory=True,
         persistent_workers=True,
@@ -73,8 +88,11 @@ def main(config, logger, exp_dir):
     alpha = 1.0 - beta
     alpha_bar = torch.cumprod(alpha, dim=0)
     lr = 2e-4  # Explore this - might want it lower when training on the full dataset
+    best_val_loss = float("inf")
+    min_delta = 1e-6
+    patience = 5
+    stop_counter = 0
 
-    losses = []  # Store losses for later plotting
     # optimizer
     optim = torch.optim.AdamW(unet.parameters(), lr=lr)  # Optimizer
 
@@ -93,10 +111,11 @@ def main(config, logger, exp_dir):
     scaler = torch.amp.GradScaler()
 
     # config.training.n_epochs = 1
-    pbar = tqdm(total=config.training.n_epochs * len(dataloader))
+    pbar = tqdm(total=config.training.n_epochs * len(train_dataloader))
     for epoch in range(1, config.training.n_epochs + 1):
+        unet.train()
         pbar.set_description(f"Epoch {epoch}/{config.training.n_epochs}")
-        for _, (trainx, head) in enumerate(dataloader):
+        for _, (trainx, head) in enumerate(train_dataloader):
             x0 = trainx.cuda()
             head = head.cuda()
             t = torch.randint(low=0, high=n_steps, size=(len(x0) // 2 + 1,)).cuda()
@@ -115,27 +134,51 @@ def main(config, logger, exp_dir):
             scaler.step(optim)
             scaler.update()
 
-            # Store the loss for later viewing
-            losses.append(loss.item())
             if config.model.ema:
                 ema_helper.update(unet)
 
             pbar.set_postfix({"loss": loss.item()})
             pbar.update(1)
 
-        if (epoch) % 10 == 0:
-            m_path = model_save / f"unet_{epoch}.pt"
-            torch.save(unet.state_dict(), m_path)
-            m_path = exp_dir / "results" / f"loss_{epoch}.npy"
-            np.save(m_path, np.array(losses))
+        if epoch % 10 == 0:
+            unet.eval()
+            val_loss_list = []
+            val_pbar = tqdm(eval_dataloader, desc=f"Validating Epoch {epoch}")
+            with torch.no_grad():
+                for val_x, val_head in val_pbar:
+                    val_x = val_x.cuda()
+                    val_head = val_head.cuda()
+                    t_val = torch.randint(0, n_steps, (val_x.shape[0],), device=val_x.device)
+                    xt_val, noise_val = q_xt_x0(val_x, t_val)
+
+                    with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+                        pred_val = unet(xt_val.float(), t_val, val_head)
+                        v_loss = F.mse_loss(noise_val.float(), pred_val)
+                    val_loss_list.append(v_loss.item())
+                    val_pbar.set_postfix({"val_loss": v_loss.item()})
+
+            avg_val_loss = np.mean(val_loss_list)
+            if avg_val_loss < (best_val_loss - min_delta):
+                best_val_loss = avg_val_loss
+                stop_counter = 0
+                torch.save(unet.state_dict(), model_save / "unet_best.pt")
+            else:
+                stop_counter += 1
+
+            torch.save(unet.state_dict(), model_save / f"unet_{epoch}.pt")
+            if stop_counter >= patience:
+                print(f"Early stopping at epoch {epoch} with best validation loss: {best_val_loss:.6f}")
+                break
 
 
 if __name__ == "__main__":
     args = parse_args()
     config = SimpleNamespace(**{k: SimpleNamespace(**v) for k, v in model_args.items()})
     config.data.dataset = args.city
-    config.data.traj_path = args.input_dir / args.city / "train_trajectories.npy"
-    config.data.head_path = args.input_dir / args.city / "train_attrs.npy"
+    config.data.train_traj_path = args.input_dir / args.city / "train_trajectories.npy"
+    config.data.train_head_path = args.input_dir / args.city / "train_attrs.npy"
+    config.data.eval_traj_path = args.input_dir / args.city / "val_trajectories.npy"
+    config.data.eval_head_path = args.input_dir / args.city / "val_attrs.npy"
     config.data.traj_length = args.trajectory_length
 
     root_dir = Path(__name__).resolve().parents[0]

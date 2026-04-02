@@ -1,8 +1,10 @@
 args = {
     "data": {
-        "dataset": None,  # set during training
-        "traj_path": None,  # set during training
-        "head_path": None,  # set during training
+        "dataset": None,
+        "train_traj_path": None,
+        "train_head_path": None,
+        "eval_traj_path": None,
+        "eval_head_path": None,
         "traj_length": 200,
         "channels": 2,
         "uniform_dequantization": False,
